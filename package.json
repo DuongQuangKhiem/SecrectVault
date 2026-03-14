@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "obfuscate": "javascript-obfuscator src/core/SecurityEngine.js --output src/core/SecurityEngine.bundle.js --compact true --control-flow-flattening true --dead-code-injection true --string-array true --string-array-encoding base64 --disable-console-output true",
+    "obfuscate": "javascript-obfuscator src/core/SecurityEngine.js --output src/core/SecurityEngine.bundle.js --compact true --control-flow-flattening true --dead-code-injection false --string-array true --string-array-encoding base64",
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
