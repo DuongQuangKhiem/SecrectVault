@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>HelloApp</string>
+	<string>SecureVault</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -28,12 +28,23 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	
+	<key>NSCameraUsageDescription</key>
+	<string>Ứng dụng cần sử dụng camera để bạn có thể chụp ảnh/quay phim và đưa trực tiếp vào két sắt bảo mật.</string>
+	
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Ứng dụng cần quyền truy cập thư viện để bạn chọn ảnh/video cần bảo mật. Chúng tôi cũng cần quyền này để xóa tệp gốc sau khi đã mã hóa an toàn.</string>
+	
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Ứng dụng cần quyền này để khôi phục (lưu lại) hình ảnh và video từ két sắt về lại thư viện ảnh của thiết bị.</string>
+	
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ứng dụng cần quyền sử dụng micro để ghi lại âm thanh khi bạn quay video bảo mật mới.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>UILaunchStoryboardName</key>

@@ -1,52 +1,73 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Secure Media App
 
-# Getting Started
+A React Native application for securely encrypting and decrypting images and videos using password protection.
+
+## Features
+
+- Select images and videos from device gallery
+- Encrypt media files with a password
+- Decrypt encrypted files back to original format
+- Secure local storage
+- User-friendly interface
+
+## Getting Started
 
 > **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
 
-## Step 1: Start Metro
+### Prerequisites
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- Node.js >= 22.11.0
+- React Native development environment set up
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+### Installation
 
+1. Install dependencies:
 ```sh
-# Using npm
+npm install
+```
+
+2. For iOS, install CocoaPods:
+```sh
+cd ios && bundle exec pod install
+```
+
+### Running the App
+
+1. Start Metro:
+```sh
 npm start
-
-# OR using Yarn
-yarn start
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
+2. Build and run on Android:
 ```sh
-# Using npm
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
+3. Or build and run on iOS:
 ```sh
-bundle install
+npm run ios
 ```
 
-Then, and every time you update your native dependencies, run:
+## Usage
 
-```sh
-bundle exec pod install
-```
+1. Tap "Select Image/Video" to choose media from your device
+2. Enter a password for encryption
+3. Tap "Encrypt Media" to secure the file
+4. To decrypt, enter the password and tap "Decrypt" on the encrypted file
+
+## Security Notes
+
+- Files are encrypted using AES encryption
+- Encrypted files are stored locally on the device
+- Always remember your passwords as recovery is not possible
+- This app provides client-side encryption only
+
+## Technologies Used
+
+- React Native
+- react-native-image-picker
+- crypto-js
+- react-native-fs
 
 For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
 
