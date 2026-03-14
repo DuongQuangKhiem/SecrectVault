@@ -1,0 +1,60 @@
+import { StyleSheet } from 'react-native';
+import { PATTERN_SIZE } from './constants';
+
+export const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f0f0f0' },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: '#f0f0f0', position: 'relative' },
+  
+  tabContainer: { flexDirection: 'row', width: '100%', backgroundColor: '#e0e0e0', borderRadius: 10, padding: 4, marginBottom: 20 },
+  tabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  tabButtonActive: { backgroundColor: 'white', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
+  tabText: { color: '#666', fontWeight: 'bold' },
+  tabTextActive: { color: '#007AFF' },
+
+  patternContainer: { width: PATTERN_SIZE, height: PATTERN_SIZE, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 20, position: 'relative' },
+  patternNodeBase: { position: 'absolute', width: 50, height: 50, justifyContent: 'center', alignItems: 'center' },
+  patternNodeInner: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#ccc' },
+  patternNodeActive: { backgroundColor: '#007AFF', transform: [{ scale: 1.5 }] },
+  patternLine: { position: 'absolute', height: 4, backgroundColor: '#007AFF', borderRadius: 2 },
+
+  customPinContainer: { width: '100%', height: 60, justifyContent: 'center', alignItems: 'center', position: 'relative', marginBottom: 20 },
+  pinDotsRow: { flexDirection: 'row', gap: 20 },
+  pinDot: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#007AFF', backgroundColor: 'transparent' },
+  pinDotActive: { backgroundColor: '#007AFF' },
+  hiddenPinInput: { position: 'absolute', width: '100%', height: '100%', opacity: 0, fontSize: 1 },
+
+  langButtonTopRight: { position: 'absolute', top: 50, right: 20, padding: 8, backgroundColor: '#e0e0e0', borderRadius: 8 },
+  langButtonText: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  langButtonSmall: { padding: 8, backgroundColor: '#e0e0e0', borderRadius: 8 },
+  langButtonTextSmall: { fontSize: 16 },
+
+  infoButton: { position: 'absolute', bottom: 30 },
+  infoText: { color: '#888', fontSize: 14, textDecorationLine: 'underline' },
+
+  appTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 10, color: '#333' },
+  subtitle: { fontSize: 16, color: '#666', marginBottom: 20, textAlign: 'center', paddingHorizontal: 10 },
+  inputWrapper: { width: '100%', flexDirection: 'row', alignItems: 'center', position: 'relative', height: 55, marginBottom: 20 },
+  passwordInput: { flex: 1, borderWidth: 1, borderColor: '#ccc', padding: 15, paddingRight: 50, borderRadius: 10, backgroundColor: 'white', fontSize: 18, color: 'black', height: 55 },
+  eyeIcon: { position: 'absolute', right: 15, height: '100%', justifyContent: 'center' },
+  eyeText: { fontSize: 22 },
+  primaryButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, width: '100%', alignItems: 'center', minHeight: 50, justifyContent: 'center' },
+  buttonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: 'white', borderBottomWidth: 1, borderColor: '#ddd' },
+  bulkActionRow: { flexDirection: 'row', paddingHorizontal: 15, paddingBottom: 10, paddingTop: 8, backgroundColor: 'white', alignItems: 'center' },
+  lockButton: { backgroundColor: '#dc3545', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
+  gridItem: { flex: 1/3, aspectRatio: 1, padding: 2, position: 'relative' },
+  gridItemSelected: { borderWidth: 2, borderColor: '#28a745', borderRadius: 6 },
+  checkboxOverlay: { position: 'absolute', top: 5, left: 5, width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(40, 167, 69, 0.9)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  checkboxText: { color: 'white', fontWeight: 'bold' },
+  thumbnail: { flex: 1, borderRadius: 5, backgroundColor: '#ddd' },
+  videoBadge: { position: 'absolute', bottom: 5, right: 5, color: 'white', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, fontSize: 10, fontWeight: 'bold' },
+  emptyText: { textAlign: 'center', marginTop: 50, color: '#888', fontSize: 16 },
+  fab: { position: 'absolute', right: 20, bottom: 40, backgroundColor: '#28a745', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
+  fabText: { color: 'white', fontSize: 30, fontWeight: 'bold', marginTop: -2 },
+  modalContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
+  closeModalArea: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
+  reviewBox: { width: '90%', height: '80%', backgroundColor: 'transparent', justifyContent: 'center' },
+  fullImage: { flex: 1, width: '100%', height: '100%', marginBottom: 20 },
+  actionRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  actionBtn: { flex: 1, padding: 15, borderRadius: 10, alignItems: 'center', marginHorizontal: 5 },
+});

@@ -73,3 +73,7 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+
+# Giấu logic lõi, chỉ đẩy file bundle đã làm rối lên Git
+src/core/SecurityEngine.js
