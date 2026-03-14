@@ -46,6 +46,9 @@ export default function AppContent() {
       decoySub: 'Dùng khi bị ép mở app. Két này sẽ hiển thị trống rỗng.',
       decoySuccess: 'Đã tạo Két giả! Hãy dùng mật khẩu này khi bị ép buộc.',
       errSamePass: 'Mật khẩu giả KHÔNG ĐƯỢC trùng mật khẩu thật!',
+      quickAdd: '📷 Thêm nhanh vào Két chính',
+      quickAddProcessing: 'Đang đẩy ảnh vào két sắt...',
+      quickAddSuccess: 'Đã giấu ảnh thành công vào Két chính!',
     };
     const extraEn: any = {
       setupDecoy: 'Create Decoy Vault',
@@ -53,6 +56,9 @@ export default function AppContent() {
       decoySub: 'Use when coerced. This vault will appear empty.',
       decoySuccess: 'Decoy vault created! Use this password when forced.',
       errSamePass: 'Decoy password MUST NOT match the real one!',
+      quickAdd: '📷 Quick Add to Main Vault',
+      quickAddProcessing: 'Securing media to vault...',
+      quickAddSuccess: 'Successfully secured to Main Vault!',
     };
 
     if (key === 'aboutContent') return getAppAuthor();
@@ -101,7 +107,8 @@ export default function AppContent() {
       const dirExists = await RNFS.exists(VAULT_DIR);
       if (!dirExists) await RNFS.mkdir(VAULT_DIR);
       
-      setGlobalPassword(await AsyncStorage.getItem('globalPassword'));
+      const gPass = await AsyncStorage.getItem('globalPassword');
+      setGlobalPassword(gPass);
       setDecoyPassword(await AsyncStorage.getItem('decoyPassword'));
       const storedType = await AsyncStorage.getItem('passwordType');
       if (storedType) {
@@ -110,7 +117,7 @@ export default function AppContent() {
       }
       await cleanUpCache();
       if (!(await AsyncStorage.getItem('hasAskedPermission'))) await handleFirstTimePermissions();
-    } catch (error) { console.error('Init error:', error); } // Lỗi này được log nên giữ nguyên
+    } catch (error) { console.error('Init error:', error); }
   };
 
   const toggleLanguage = async () => {
@@ -156,8 +163,7 @@ export default function AppContent() {
   };
 
   const saveEncryptedIndex = async (items: ExtendedVaultItem[], password: string, targetFile: string) => {
-    // Đã fix lỗi unused vars bằng cách đổi tên thành _cachePath và _thumbCachePath
-    const itemsToSave = items.map(({ cachePath: _cachePath, thumbCachePath: _thumbCachePath, ...rest }) => rest);
+    const itemsToSave = items.map(({ cachePath: _c, thumbCachePath: _tc, ...rest }) => rest);
     await RNFS.writeFile(targetFile, encryptIndexData(itemsToSave, password), 'utf8');
   };
 
@@ -181,6 +187,77 @@ export default function AppContent() {
     
     setInputPassword(''); setIsLoading(false); setLoadingMsg('');
     Alert.alert(t('alertSuccess'), t('succSetup'));
+  };
+
+
+  const handleQuickAdd = async () => {
+    if (!globalPassword) return Alert.alert(t('alertNotice'), "Bạn cần cài mật khẩu trước đã.");
+
+    const options = { mediaType: 'mixed' as const, includeBase64: false, selectionLimit: 0 };
+
+    launchImageLibrary(options, async (response) => {
+      if (response.didCancel || !response.assets) return;
+      setIsLoading(true); 
+      setLoadingMsg(t('quickAddProcessing'));
+
+      const urisToDelete: string[] = [];
+      const realPathsToDelete: string[] = [];
+      const newItems: ExtendedVaultItem[] = [];
+
+      try {
+        for (let i = 0; i < response.assets.length; i++) {
+          const asset = response.assets[i];
+          if (!asset.uri || !asset.fileName) continue;
+
+          const uniqueId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          const secureSavedPath = `${VAULT_DIR}/${uniqueId}.bin`; 
+          const isVideo = !!asset.fileName.match(/\.(mp4|mov|avi|mkv)$/i);
+          let thumbSavedPath = undefined;
+
+          if (isVideo) {
+            try {
+              const thumb = await createThumbnail({ url: asset.uri, timeStamp: 0 });
+              thumbSavedPath = `${VAULT_DIR}/thumb_${uniqueId}.bin`;
+              await RNFS.copyFile(thumb.path, thumbSavedPath);
+              await secureMediaLayer(thumbSavedPath, globalPassword!); 
+              await RNFS.unlink(thumb.path); 
+            } catch (e) { console.warn('Lỗi tạo thumbnail', e); }
+          }
+
+          await RNFS.copyFile(asset.uri, secureSavedPath);
+          await secureMediaLayer(secureSavedPath, globalPassword!); 
+          
+          newItems.push({
+            id: uniqueId,
+            originalName: asset.fileName,
+            type: isVideo ? 'video' : 'image',
+            savedPath: `file://${secureSavedPath}`,
+            thumbSavedPath: thumbSavedPath ? `file://${thumbSavedPath}` : undefined
+          });
+
+          urisToDelete.push(asset.uri);
+          if (Platform.OS === 'android') {
+            const realPath = await RNRealPath.getRealPathFromURI(asset.uri);
+            if (realPath) realPathsToDelete.push(realPath);
+          }
+        }
+
+        const coreIndex = VAULT_DIR + CORE_INDEX_NAME;
+        const currentItems = await loadEncryptedIndex(globalPassword!, coreIndex);
+        const updatedVault = [...currentItems, ...newItems];
+        await saveEncryptedIndex(updatedVault, globalPassword!, coreIndex);
+        
+     
+        for (const realPath of realPathsToDelete) {
+          try { await RNFS.unlink(realPath); } catch (_e) {}
+        }
+        Alert.alert(t('alertSuccess'), t('quickAddSuccess'));
+      } catch (_err) {
+        Alert.alert(t('alertError'), t('errXOR'));
+      } finally {
+        setIsLoading(false); setLoadingMsg('');
+      }
+    });
   };
 
   const handleSetupDecoy = async () => {
@@ -211,7 +288,7 @@ export default function AppContent() {
         const item = items[i];
         setLoadingMsg(`Đang tải dữ liệu ${i + 1}/${items.length}...`);
         
-        const safeOriginalName = item.originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const safeName = item.originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
         let cachePath = '';
         let thumbCachePath = '';
 
@@ -221,7 +298,7 @@ export default function AppContent() {
           await secureMediaLayer(tPath, inputPassword); 
           thumbCachePath = `file://${tPath}`;
         } else {
-          const cPath = `${CACHE_DIR}/${item.id}_${safeOriginalName}`;
+          const cPath = `${CACHE_DIR}/${item.id}_${safeName}`;
           await RNFS.copyFile(item.savedPath.replace('file://', ''), cPath);
           await secureMediaLayer(cPath, inputPassword); 
           cachePath = `file://${cPath}`;
@@ -240,6 +317,7 @@ export default function AppContent() {
     }
   };
 
+
   const handleVerifyOldPass = () => {
     if (oldPasswordInput !== globalPassword) return Alert.alert(t('alertError'), t('errWrongPass'));
     setChangePassStep(2); setActiveTab('text'); setNewPasswordInput('');
@@ -251,43 +329,30 @@ export default function AppContent() {
 
     setIsLoading(true); setLoadingMsg('Đang mã hóa lại Két sắt...');
     try {
-      const items = await loadEncryptedIndex(oldPasswordInput, VAULT_DIR + CORE_INDEX_NAME);
-
+      const items = await loadEncryptedIndex(oldPasswordInput!, VAULT_DIR + CORE_INDEX_NAME);
       for (let i = 0; i < items.length; i++) {
         setLoadingMsg(`Đang đổi khóa file ${i + 1}/${items.length}...`);
         const item = items[i];
         const vaultPath = item.savedPath.replace('file://', '');
-        
-        await reSecureMediaLayer(vaultPath, oldPasswordInput, newPasswordInput);
-
+        await reSecureMediaLayer(vaultPath, oldPasswordInput!, newPasswordInput);
         if (item.thumbSavedPath) {
-          await reSecureMediaLayer(item.thumbSavedPath.replace('file://', ''), oldPasswordInput, newPasswordInput);
+          await reSecureMediaLayer(item.thumbSavedPath.replace('file://', ''), oldPasswordInput!, newPasswordInput);
         }
       }
-
       await saveEncryptedIndex(items, newPasswordInput, VAULT_DIR + CORE_INDEX_NAME);
       await AsyncStorage.setItem('globalPassword', newPasswordInput);
       await AsyncStorage.setItem('passwordType', activeTab);
-      
       setGlobalPassword(newPasswordInput); setPassType(activeTab);
-      setIsChangingPassword(false); setChangePassStep(1);
-      setOldPasswordInput(''); setNewPasswordInput('');
-      
+      setIsChangingPassword(false); setChangePassStep(1); setOldPasswordInput(''); setNewPasswordInput('');
       Alert.alert(t('alertSuccess'), t('succChangePass'));
-    } catch (_error) {
-      Alert.alert(t('alertError'), t('errChangePass'));
-    } finally {
-      setIsLoading(false); setLoadingMsg('');
-    }
+    } catch (_error) { Alert.alert(t('alertError'), t('errChangePass')); } finally { setIsLoading(false); setLoadingMsg(''); }
   };
 
   const handleAddMedia = async () => {
     const options = { mediaType: 'mixed' as const, includeBase64: false, selectionLimit: 0 };
-
     launchImageLibrary(options, async (response) => {
       if (response.didCancel || !response.assets) return;
       setIsLoading(true);
-      
       const urisToDelete: string[] = [];
       const realPathsToDelete: string[] = [];
       const newItems: ExtendedVaultItem[] = [];
@@ -299,90 +364,61 @@ export default function AppContent() {
         for (let i = 0; i < response.assets.length; i++) {
           const asset = response.assets[i];
           if (!asset.uri || !asset.fileName) continue;
-          
           setLoadingMsg(`Đang giấu file ${i + 1}/${response.assets.length}...`);
-
           const uniqueId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
           const secureSavedPath = `${VAULT_DIR}/${uniqueId}.bin`; 
           const isVideo = !!asset.fileName.match(/\.(mp4|mov|avi|mkv)$/i);
           let thumbSavedPath = undefined;
-
           if (isVideo) {
             try {
               const thumb = await createThumbnail({ url: asset.uri, timeStamp: 0 });
               thumbSavedPath = `${VAULT_DIR}/thumb_${uniqueId}.bin`;
               await RNFS.copyFile(thumb.path, thumbSavedPath);
-              await secureMediaLayer(thumbSavedPath, currentPass); 
+              await secureMediaLayer(thumbSavedPath, currentPass);
               await RNFS.unlink(thumb.path); 
-            } catch (e) { console.warn('Lỗi tạo thumbnail', e); } // Biến e này có log ra nên giữ nguyên
+            } catch (e) {}
           }
-
           await RNFS.copyFile(asset.uri, secureSavedPath);
           await secureMediaLayer(secureSavedPath, currentPass); 
-          
           const newItem: ExtendedVaultItem = {
-            id: uniqueId,
-            originalName: asset.fileName,
-            type: isVideo ? 'video' : 'image',
-            savedPath: `file://${secureSavedPath}`,
-            thumbSavedPath: thumbSavedPath ? `file://${thumbSavedPath}` : undefined
+            id: uniqueId, originalName: asset.fileName, type: isVideo ? 'video' : 'image',
+            savedPath: `file://${secureSavedPath}`, thumbSavedPath: thumbSavedPath ? `file://${thumbSavedPath}` : undefined
           };
-
           if (isUnlocked) {
-            const safeOriginalName = asset.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const safeName = asset.fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
             if (isVideo && thumbSavedPath) {
               const tCachePath = `${CACHE_DIR}/thumb_${uniqueId}.jpg`;
               await RNFS.copyFile(thumbSavedPath.replace('file://',''), tCachePath);
               await secureMediaLayer(tCachePath, currentPass);
               newItem.thumbCachePath = `file://${tCachePath}`;
             } else {
-              const cachePath = `${CACHE_DIR}/${uniqueId}_${safeOriginalName}`;
+              const cachePath = `${CACHE_DIR}/${uniqueId}_${safeName}`;
               await RNFS.copyFile(secureSavedPath, cachePath);
               await secureMediaLayer(cachePath, currentPass); 
               newItem.cachePath = `file://${cachePath}`;
             }
           }
-
-          newItems.push(newItem);
-          urisToDelete.push(asset.uri);
-
+          newItems.push(newItem); urisToDelete.push(asset.uri);
           if (Platform.OS === 'android' && asset.uri.startsWith('content://')) {
             try {
               const realPath = await RNRealPath.getRealPathFromURI(asset.uri);
               if (realPath) realPathsToDelete.push(realPath);
             } catch (_e) { if (asset.originalPath) realPathsToDelete.push(asset.originalPath); }
-          } else if (asset.originalPath) {
-            realPathsToDelete.push(asset.originalPath);
-          }
+          } else if (asset.originalPath) realPathsToDelete.push(asset.originalPath);
         }
-
         const currentItems = await loadEncryptedIndex(currentPass, currentIndex);
         const updatedVault = [...currentItems, ...newItems];
         await saveEncryptedIndex(updatedVault, currentPass, currentIndex);
         if (isUnlocked) setVaultItems(updatedVault);
-        
-      } catch (_err) {
-        setIsLoading(false); setLoadingMsg('');
-        return Alert.alert(t('alertError'), t('errXOR'));
-      }
+      } catch (_err) { setIsLoading(false); return Alert.alert(t('alertError'), t('errXOR')); }
 
       setLoadingMsg('Đang dọn dẹp file gốc...');
       try {
-        let deletedCount = 0;
-        for (const realPath of realPathsToDelete) {
-          try { await RNFS.unlink(realPath); deletedCount++; } catch (_e) {}
-        }
-        if (deletedCount === 0 && urisToDelete.length > 0) {
-          try { await CameraRoll.deletePhotos(urisToDelete); deletedCount = urisToDelete.length; } catch (_e) {}
-        }
-        if (deletedCount > 0) {
-          Alert.alert(t('alertSuccess'), `${t('succHidePrefix')} ${deletedCount} ${t('succHideSuffix')}`);
-        } else {
-          Alert.alert(t('alertNotice'), t('errNoPerm'));
-        }
-      } catch (_deleteError) { Alert.alert(t('alertNotice'), t('errNoPerm')); } finally {
-        setIsLoading(false); setLoadingMsg('');
-      }
+        let delCount = 0;
+        for (const realPath of realPathsToDelete) { try { await RNFS.unlink(realPath); delCount++; } catch (_e) {} }
+        if (delCount === 0 && urisToDelete.length > 0) { try { await CameraRoll.deletePhotos(urisToDelete); delCount = urisToDelete.length; } catch (_e) {} }
+        Alert.alert(t('alertSuccess'), `${t('succHidePrefix')} ${delCount} ${t('succHideSuffix')}`);
+      } catch (_deleteError) { Alert.alert(t('alertNotice'), t('errNoPerm')); } finally { setIsLoading(false); setLoadingMsg(''); }
     });
   };
 
@@ -391,14 +427,9 @@ export default function AppContent() {
     try {
       const fullCacheTemp = `${CACHE_DIR}/full_${item.id}_${item.originalName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
       await RNFS.copyFile(item.savedPath.replace('file://', ''), fullCacheTemp);
-      
       await secureMediaLayer(fullCacheTemp, getCurrentPassword()); 
-      
       setFullMediaPath(`file://${fullCacheTemp}`);
-    } catch (_e) {
-      Alert.alert(t('alertError'), 'Không thể tải file media');
-      setViewingItem(null);
-    } finally { setIsPreparingMedia(false); }
+    } catch (_e) { Alert.alert(t('alertError'), 'Không thể tải file media'); setViewingItem(null); } finally { setIsPreparingMedia(false); }
   };
 
   const closeMedia = async () => {
@@ -410,9 +441,7 @@ export default function AppContent() {
     const tempRestorePath = `${CACHE_DIR}/restore_${item.originalName}`;
     await RNFS.copyFile(item.savedPath.replace('file://', ''), tempRestorePath);
     await secureMediaLayer(tempRestorePath, getCurrentPassword()); 
-
     await CameraRoll.save(`file://${tempRestorePath}`, { type: 'auto' });
-
     await RNFS.unlink(tempRestorePath).catch(() => {});
     await RNFS.unlink(item.savedPath.replace('file://', '')).catch(() => {});
     if (item.thumbSavedPath) await RNFS.unlink(item.thumbSavedPath.replace('file://', '')).catch(() => {});
@@ -428,9 +457,7 @@ export default function AppContent() {
       await saveEncryptedIndex(updatedVault, getCurrentPassword(), getCurrentIndexFile());
       setVaultItems(updatedVault); closeMedia(); setSelectedRestoreIds(prev => prev.filter(id => id !== item.id));
       Alert.alert(t('alertSuccess'), t('succRestore'));
-    } catch (_error) { Alert.alert(t('alertError'), t('errRestore')); } finally {
-      setIsLoading(false); setLoadingMsg('');
-    }
+    } catch (_error) { Alert.alert(t('alertError'), t('errRestore')); } finally { setIsLoading(false); setLoadingMsg(''); }
   };
 
   const handleBulkUnhide = async () => {
@@ -443,14 +470,12 @@ export default function AppContent() {
         if (selectedRestoreIds.includes(item.id)) {
           setLoadingMsg(`Đang khôi phục ${i + 1}/${selectedRestoreIds.length}...`);
           try { await unhideItem(item); } catch (_e) { }
-        } else { remaining.push(item); }
+        } else remaining.push(item);
       }
       await saveEncryptedIndex(remaining, getCurrentPassword(), getCurrentIndexFile());
       setVaultItems(remaining); setSelectedRestoreIds([]);
       Alert.alert(t('alertSuccess'), t('succRestoreMultiple'));
-    } catch (_error) { Alert.alert(t('alertError'), t('errRestore')); } finally {
-      setIsLoading(false); setLoadingMsg('');
-    }
+    } catch (_error) { Alert.alert(t('alertError'), t('errRestore')); } finally { setIsLoading(false); setLoadingMsg(''); }
   };
 
   const handleLockVault = async () => {
@@ -461,33 +486,26 @@ export default function AppContent() {
     setIsLoading(false); setLoadingMsg('');
   };
 
-  const toggleRestoreSelection = (itemId: string) => {
-    setSelectedRestoreIds(prev => prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]);
-  };
-  const clearRestoreSelection = () => setSelectedRestoreIds([]);
+  const toggleRestoreSelection = (id: string) => setSelectedRestoreIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
   const renderInputUI = (type: PasswordType, value: string, setValue: (s: string) => void, placeholder: string) => {
-    if (type === 'pattern') {
-      return (
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ marginBottom: 15, color: '#007AFF', fontWeight: 'bold' }}>{t('drawPattern')}</Text>
-          <PatternLock onComplete={setValue} />
-          {value.length > 0 && <Text style={{ marginTop: 10, color: '#28a745', fontWeight: 'bold' }}>{t('patternRecorded')}</Text>}
+    if (type === 'pattern') return (
+      <View style={{ alignItems: 'center' }}>
+        <Text style={{ marginBottom: 15, color: '#007AFF', fontWeight: 'bold' }}>{t('drawPattern')}</Text>
+        <PatternLock onComplete={setValue} />
+        {value.length > 0 && <Text style={{ marginTop: 10, color: '#28a745', fontWeight: 'bold' }}>{t('patternRecorded')}</Text>}
+      </View>
+    );
+    if (type === 'pin') return (
+      <View style={styles.customPinContainer}>
+        <View style={styles.pinDotsRow}>
+          {[0, 1, 2, 3, 4, 5].map((index) => (
+            <View key={index} style={[styles.pinDot, value.length > index && styles.pinDotActive]} />
+          ))}
         </View>
-      );
-    }
-    if (type === 'pin') {
-      return (
-        <View style={styles.customPinContainer}>
-          <View style={styles.pinDotsRow}>
-            {[0, 1, 2, 3, 4, 5].map((index) => (
-              <View key={index} style={[styles.pinDot, value.length > index && styles.pinDotActive]} />
-            ))}
-          </View>
-          <TextInput style={styles.hiddenPinInput} keyboardType="numeric" maxLength={6} value={value} onChangeText={setValue} caretHidden={true} autoFocus={true} />
-        </View>
-      );
-    }
+        <TextInput style={styles.hiddenPinInput} keyboardType="numeric" maxLength={6} value={value} onChangeText={setValue} caretHidden={true} autoFocus={true} />
+      </View>
+    );
     return (
       <View style={styles.inputWrapper}>
         <TextInput style={styles.passwordInput} placeholder={placeholder} placeholderTextColor="#888" secureTextEntry={!showPassword} value={value} onChangeText={setValue} />
@@ -506,80 +524,79 @@ export default function AppContent() {
     </View>
   );
 
-  if (isLoading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 10, color: 'black', fontWeight: 'bold' }}>{loadingMsg || t('loading')}</Text>
-      </View>
-    );
-  }
+ 
+  if (isLoading) return (
+    <View style={styles.centerContainer}>
+      <ActivityIndicator size="large" color="#007AFF" />
+      <Text style={{ marginTop: 10, color: 'black', fontWeight: 'bold' }}>{loadingMsg || t('loading')}</Text>
+    </View>
+  );
 
-  if (isSettingDecoy) {
-    return (
-      <View style={[styles.centerContainer, { paddingTop: safeAreaInsets.top }]}>
-        <Text style={styles.appTitle}>{t('decoyTitle')}</Text>
-        <Text style={styles.subtitle}>{t('decoySub')}</Text>
-        {renderTabSelector()}
-        {renderInputUI(activeTab, newPasswordInput, setNewPasswordInput, t('newPasswordPlaceholder') as string)}
-        <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 20 }}>
-          <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#6c757d' }]} onPress={() => { setIsSettingDecoy(false); setNewPasswordInput(''); }}><Text style={styles.buttonText}>{t('cancel')}</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#dc3545' }]} onPress={handleSetupDecoy}><Text style={styles.buttonText}>{t('confirm')}</Text></TouchableOpacity>
-        </View>
+  if (isSettingDecoy) return (
+    <View style={[styles.centerContainer, { paddingTop: safeAreaInsets.top }]}>
+      <Text style={styles.appTitle}>{t('decoyTitle')}</Text>
+      <Text style={styles.subtitle}>{t('decoySub')}</Text>
+      {renderTabSelector()}
+      {renderInputUI(activeTab, newPasswordInput, setNewPasswordInput, t('newPasswordPlaceholder') as string)}
+      <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 20 }}>
+        <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#6c757d' }]} onPress={() => { setIsSettingDecoy(false); setNewPasswordInput(''); }}><Text style={styles.buttonText}>{t('cancel')}</Text></TouchableOpacity>
+        <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#dc3545' }]} onPress={handleSetupDecoy}><Text style={styles.buttonText}>{t('confirm')}</Text></TouchableOpacity>
       </View>
-    );
-  }
+    </View>
+  );
 
-  if (isChangingPassword) {
-    return (
-      <View style={[styles.centerContainer, { paddingTop: safeAreaInsets.top }]}>
-        <Text style={styles.appTitle}>{t('changePasswordTitle')}</Text>
-        <Text style={styles.subtitle}>{changePassStep === 1 ? t('verifyOldPass') : t('setupNewPass')}</Text>
-        {changePassStep === 1 ? (
-          <>
-            {renderInputUI(passType, oldPasswordInput, setOldPasswordInput, t('oldPasswordPlaceholder') as string)}
-            <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 20 }}>
-              <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#6c757d' }]} onPress={() => { setIsChangingPassword(false); setChangePassStep(1); }}><Text style={styles.buttonText}>{t('cancel')}</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryButton, { flex: 1 }]} onPress={handleVerifyOldPass}><Text style={styles.buttonText}>{t('next')}</Text></TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <>
-            {renderTabSelector()}
-            {renderInputUI(activeTab, newPasswordInput, setNewPasswordInput, t('newPasswordPlaceholder') as string)}
-            <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 20 }}>
-              <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#6c757d' }]} onPress={() => { setIsChangingPassword(false); setChangePassStep(1); }}><Text style={styles.buttonText}>{t('cancel')}</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.primaryButton, { flex: 1 }]} onPress={handleConfirmNewPass}><Text style={styles.buttonText}>{t('confirm')}</Text></TouchableOpacity>
-            </View>
-          </>
-        )}
-      </View>
-    );
-  }
+  if (isChangingPassword) return (
+    <View style={[styles.centerContainer, { paddingTop: safeAreaInsets.top }]}>
+      <Text style={styles.appTitle}>{t('changePasswordTitle')}</Text>
+      <Text style={styles.subtitle}>{changePassStep === 1 ? t('verifyOldPass') : t('setupNewPass')}</Text>
+      {changePassStep === 1 ? (
+        <>
+          {renderInputUI(passType, oldPasswordInput, setOldPasswordInput, t('oldPasswordPlaceholder') as string)}
+          <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 20 }}>
+            <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#6c757d' }]} onPress={() => { setIsChangingPassword(false); setChangePassStep(1); }}><Text style={styles.buttonText}>{t('cancel')}</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.primaryButton, { flex: 1 }]} onPress={handleVerifyOldPass}><Text style={styles.buttonText}>{t('next')}</Text></TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <>
+          {renderTabSelector()}
+          {renderInputUI(activeTab, newPasswordInput, setNewPasswordInput, t('newPasswordPlaceholder') as string)}
+          <View style={{ flexDirection: 'row', width: '100%', gap: 10, marginTop: 20 }}>
+            <TouchableOpacity style={[styles.primaryButton, { flex: 1, backgroundColor: '#6c757d' }]} onPress={() => { setIsChangingPassword(false); setChangePassStep(1); }}><Text style={styles.buttonText}>{t('cancel')}</Text></TouchableOpacity>
+            <TouchableOpacity style={[styles.primaryButton, { flex: 1 }]} onPress={handleConfirmNewPass}><Text style={styles.buttonText}>{t('confirm')}</Text></TouchableOpacity>
+          </View>
+        </>
+      )}
+    </View>
+  );
 
-  if (!isUnlocked) {
-    return (
-      <View style={[styles.centerContainer, { paddingTop: safeAreaInsets.top }]}>
-        <TouchableOpacity style={styles.langButtonTopRight} onPress={toggleLanguage}><Text style={styles.langButtonText}>{lang === 'vi' ? '🇻🇳 VN' : '🇬🇧 EN'}</Text></TouchableOpacity>
-        <Text style={styles.appTitle}>{t('vaultTitle')}</Text>
-        <Text style={styles.subtitle}>{globalPassword ? t('vaultSubLocked') : t('vaultSubSetup')}</Text>
-        {!globalPassword && renderTabSelector()}
-        {renderInputUI(!globalPassword ? activeTab : passType, inputPassword, setInputPassword, t('passwordPlaceholder') as string)}
-        {!globalPassword ? (
-          <TouchableOpacity style={[styles.primaryButton, { marginTop: 20 }]} onPress={handleSetPassword}><Text style={styles.buttonText}>{t('setupFirstTime')}</Text></TouchableOpacity>
-        ) : (
-          <>
-            <TouchableOpacity style={[styles.primaryButton, { marginTop: 20 }]} onPress={handleUnlockVault}><Text style={styles.buttonText}>{t('unlockVault')}</Text></TouchableOpacity>
-            <TouchableOpacity style={{ marginTop: 30 }} onPress={() => { setIsChangingPassword(true); setChangePassStep(1); setOldPasswordInput(''); setNewPasswordInput(''); }}><Text style={{ color: '#007AFF', fontSize: 16, textDecorationLine: 'underline' }}>{t('changePasswordLink')}</Text></TouchableOpacity>
-            {!decoyPassword && (
-              <TouchableOpacity style={{ marginTop: 15 }} onPress={() => setIsSettingDecoy(true)}><Text style={{ color: '#dc3545', fontSize: 16, textDecorationLine: 'underline' }}>{t('setupDecoy')}</Text></TouchableOpacity>
-            )}
-          </>
-        )}
-        <TouchableOpacity style={styles.infoButton} onPress={() => showAuthorAlert()}><Text style={styles.infoText}>{t('appInfoLabel')}</Text></TouchableOpacity>
-      </View>
-    );
-  }
+  if (!isUnlocked) return (
+    <View style={[styles.centerContainer, { paddingTop: safeAreaInsets.top }]}>
+      <TouchableOpacity style={styles.langButtonTopRight} onPress={toggleLanguage}><Text style={styles.langButtonText}>{lang === 'vi' ? '🇻🇳 VN' : '🇬🇧 EN'}</Text></TouchableOpacity>
+      <Text style={styles.appTitle}>{t('vaultTitle')}</Text>
+      <Text style={styles.subtitle}>{globalPassword ? t('vaultSubLocked') : t('vaultSubSetup')}</Text>
+      {!globalPassword && renderTabSelector()}
+      {renderInputUI(!globalPassword ? activeTab : passType, inputPassword, setInputPassword, t('passwordPlaceholder') as string)}
+      {!globalPassword ? (
+        <TouchableOpacity style={[styles.primaryButton, { marginTop: 20 }]} onPress={handleSetPassword}><Text style={styles.buttonText}>{t('setupFirstTime')}</Text></TouchableOpacity>
+      ) : (
+        <>
+          <TouchableOpacity style={[styles.primaryButton, { marginTop: 20 }]} onPress={handleUnlockVault}><Text style={styles.buttonText}>{t('unlockVault')}</Text></TouchableOpacity>
+          
+      
+          <TouchableOpacity style={[styles.primaryButton, { marginTop: 15, backgroundColor: '#28a745' }]} onPress={handleQuickAdd}>
+            <Text style={styles.buttonText}>{t('quickAdd')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={{ marginTop: 30 }} onPress={() => { setIsChangingPassword(true); setChangePassStep(1); setOldPasswordInput(''); setNewPasswordInput(''); }}><Text style={{ color: '#007AFF', fontSize: 16, textDecorationLine: 'underline' }}>{t('changePasswordLink')}</Text></TouchableOpacity>
+          {!decoyPassword && (
+            <TouchableOpacity style={{ marginTop: 15 }} onPress={() => setIsSettingDecoy(true)}><Text style={{ color: '#dc3545', fontSize: 16, textDecorationLine: 'underline' }}>{t('setupDecoy')}</Text></TouchableOpacity>
+          )}
+        </>
+      )}
+      <TouchableOpacity style={styles.infoButton} onPress={() => showAuthorAlert()}><Text style={styles.infoText}>{t('appInfoLabel')}</Text></TouchableOpacity>
+    </View>
+  );
 
   return (
     <View style={[styles.container, { paddingTop: safeAreaInsets.top }]}>
@@ -590,17 +607,14 @@ export default function AppContent() {
           <TouchableOpacity style={styles.lockButton} onPress={handleLockVault}><Text style={styles.buttonText}>{t('lockButton')}</Text></TouchableOpacity>
         </View>
       </View>
-
       {selectedRestoreIds.length > 0 && (
         <View style={styles.bulkActionRow}>
-          <TouchableOpacity style={[styles.primaryButton, { flex: 1, marginRight: 8, backgroundColor: '#6c757d' }]} onPress={clearRestoreSelection}><Text style={styles.buttonText}>{t('deselectAll')}</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.primaryButton, { flex: 1, marginRight: 8, backgroundColor: '#6c757d' }]} onPress={() => setSelectedRestoreIds([])}><Text style={styles.buttonText}>{t('deselectAll')}</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.primaryButton, { flex: 1, marginLeft: 8, backgroundColor: '#28a745' }]} onPress={handleBulkUnhide}><Text style={styles.buttonText}>{t('restoreSelected')}</Text></TouchableOpacity>
         </View>
       )}
       <FlatList
-        data={vaultItems}
-        numColumns={3}
-        keyExtractor={item => item.id}
+        data={vaultItems} numColumns={3} keyExtractor={item => item.id}
         renderItem={({ item }) => {
           const checked = selectedRestoreIds.includes(item.id);
           const onPress = () => selectedRestoreIds.length > 0 ? toggleRestoreSelection(item.id) : openMedia(item);
@@ -614,9 +628,7 @@ export default function AppContent() {
         }}
         ListEmptyComponent={<Text style={styles.emptyText}>{t('emptyVault')}</Text>}
       />
-
       <TouchableOpacity style={styles.fab} onPress={handleAddMedia}><Text style={styles.fabText}>+</Text></TouchableOpacity>
-
       <Modal visible={!!viewingItem} transparent={true} animationType="fade" onRequestClose={closeMedia}>
         <View style={styles.modalContainer}>
           <TouchableOpacity style={styles.closeModalArea} onPress={closeMedia} />
